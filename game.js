@@ -150,7 +150,7 @@ function startFishSpawn() {
 
   fishSpawnInterval = setInterval(() => {
     spawnFish();
-  }, 10000);
+  }, 5000);
 }
 
 function stopFishSpawn() {
