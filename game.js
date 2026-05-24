@@ -7,10 +7,12 @@ let score = 0;
 let coins = 0;
 let rewardText = "";
 let rewardTimer = 0;
-
-// 🎰 슬롯
 let slotSpinning = false;
 let slotTimer = 0;
+let lastShotTime = Date.now();
+let fishSpawnInterval = null;
+let fishSpawnPaused = false;
+let idleTimer = 0;
 
 const exchangeButton = {
   x: canvas.width / 2 - 120,
@@ -120,6 +122,7 @@ canvas.addEventListener("click", (e) => {
     targetY: cannon.y + Math.sin(cannon.angle) * 1000,
     speed: 10
   });
+  lastShotTime = Date.now();
 
 });
 
@@ -142,7 +145,18 @@ function spawnFish() {
     hitTime: 0
   });
 }
-setInterval(spawnFish, 2000);
+function startFishSpawn() {
+  if (fishSpawnInterval) return;
+
+  fishSpawnInterval = setInterval(() => {
+    spawnFish();
+  }, 10000);
+}
+
+function stopFishSpawn() {
+  clearInterval(fishSpawnInterval);
+  fishSpawnInterval = null;
+}
 
 // =====================
 // 🐋 보스 생성
@@ -179,6 +193,14 @@ function startSlot() {
 // =====================
 
   function gameLoop() {
+
+    idleTimer = Date.now() - lastShotTime;
+
+  if (idleTimer > 5000) {
+    stopFishSpawn();
+  } else {
+    startFishSpawn();
+  }
 
   let shakeX = 0;
   let shakeY = 0;
@@ -274,32 +296,108 @@ function startSlot() {
   // 🐋 보스 업데이트
   // =====================
   if (boss) {
+
+  // =========================
+  // 🐟 가장 가까운 물고기 찾기
+  // =========================
+  let targetFish = null;
+  let minDist = Infinity;
+
+  for (let fish of fishes) {
+    const dx = fish.x - boss.x;
+    const dy = fish.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < minDist) {
+      minDist = dist;
+      targetFish = fish;
+    }
+  }
+
+  // =========================
+  // 🐋 이동 (추적 or 기본 이동)
+  // =========================
+  if (targetFish) {
+    const dx = targetFish.x - boss.x;
+    const dy = targetFish.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    boss.x += (dx / dist) * boss.speedX * 1.5;
+    boss.y += (dy / dist) * boss.speedY * 1.5;
+  } else {
     boss.x += boss.speedX;
     boss.y += boss.speedY;
-    boss.wave += boss.waveSpeed;
-
-    if (boss.x < boss.width/2 || boss.x > canvas.width - boss.width/2)
-      boss.speedX *= -1;
-
-    if (boss.y < 100 || boss.y > canvas.height/2)
-      boss.speedY *= -1;
-
-    ctx.fillStyle = boss.color;
-    ctx.beginPath();
-    ctx.ellipse(boss.x, boss.y, boss.width/2, boss.height/2, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle = "black";
-    ctx.fillRect(boss.x - boss.width/2, boss.y - boss.height/2 - 20, boss.width, 8);
-
-    ctx.fillStyle = "red";
-    ctx.fillRect(
-      boss.x - boss.width/2,
-      boss.y - boss.height/2 - 20,
-      boss.width * (boss.hp / boss.maxHp),
-      8
-    );
   }
+
+  boss.wave += boss.waveSpeed;
+
+  // =========================
+  // 🧱 벽 반사
+  // =========================
+  if (boss.x < boss.width / 2 || boss.x > canvas.width - boss.width / 2)
+    boss.speedX *= -1;
+
+  if (boss.y < 100 || boss.y > canvas.height / 2)
+    boss.speedY *= -1;
+
+  // =========================
+  // 🍽️ 먹기 판정
+  // =========================
+  const eatRange = boss.width * 0.4;
+
+  if (targetFish && minDist < eatRange) {
+
+    const index = fishes.indexOf(targetFish);
+    if (index !== -1) fishes.splice(index, 1);
+
+    score += 20;
+    coins += 10;
+
+    // 💥 이펙트
+    for (let i = 0; i < 15; i++) {
+      particles.push({
+        x: targetFish.x,
+        y: targetFish.y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        life: 30
+      });
+    }
+  }
+
+  // =========================
+  // 🐋 렌더링
+  // =========================
+  ctx.fillStyle = boss.color;
+  ctx.beginPath();
+  ctx.ellipse(
+    boss.x,
+    boss.y,
+    boss.width / 2,
+    boss.height / 2,
+    0,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+
+  // HP 바
+  ctx.fillStyle = "black";
+  ctx.fillRect(
+    boss.x - boss.width / 2,
+    boss.y - boss.height / 2 - 20,
+    boss.width,
+    8
+  );
+
+  ctx.fillStyle = "red";
+  ctx.fillRect(
+    boss.x - boss.width / 2,
+    boss.y - boss.height / 2 - 20,
+    boss.width * (boss.hp / boss.maxHp),
+    8
+  );
+}
 
   // =====================
   // 총알
@@ -398,7 +496,7 @@ function startSlot() {
       if (boss.hp <= 0) {
         boss = null;
         bossActive = false;
-        bossCooldown = 600;
+        bossCooldown = 60 * 60 * 5;
         bossTimer = 60 * 60 * 5;
 
         score += 500;
@@ -684,11 +782,11 @@ function drawRewardText() {
   ctx.textAlign = "left";
 }
 
+startFishSpawn();
 // =====================
 // 시작
 // =====================
 gameLoop();
-
 function drawExchangeButton() {
 
   if (score < 1000) return;
