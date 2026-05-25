@@ -6,8 +6,8 @@ const ctx = canvas.getContext("2d");
 let scale = 1;
 
 function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  canvas.width = 1280;
+  canvas.height = 720;
 
   // 🔥 scale 계산 (핵심)
   scale = Math.min(
