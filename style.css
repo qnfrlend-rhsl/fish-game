@@ -2,8 +2,10 @@ body {
   margin: 0;
   overflow: hidden;
   background: #001f3f;
+  overscroll-behavior: none;
 }
 
 canvas {
   display: block;
+  touch-action: none;
 }

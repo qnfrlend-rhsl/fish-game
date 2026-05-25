@@ -1,7 +1,14 @@
+document.body.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+
+canvas.style.touchAction = "none";
+canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+canvas.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
 
 let score = 0;
 let coins = 0;
@@ -12,7 +19,11 @@ let slotTimer = 0;
 let lastShotTime = Date.now();
 let fishSpawnInterval = null;
 let fishSpawnPaused = false;
-let idleTimer = 0;
+let isFiring = false;
+let fireDelay = 0;
+let fireCooldown = 6;
+let isPointerOnUI = false;
+let muzzleFlash = 0;
 
 const exchangeButton = {
   x: canvas.width / 2 - 120,
@@ -20,6 +31,15 @@ const exchangeButton = {
   width: 300,
   height: 50
 };
+
+function isInsideButton(x, y, btn) {
+  return (
+    x > btn.x &&
+    x < btn.x + btn.width &&
+    y > btn.y &&
+    y < btn.y + btn.height
+  );
+}
 
 const slotIcons = ["🍒", "💎", "7️⃣", "⭐","🐟"];
 
@@ -43,8 +63,9 @@ let bgDark = 0;
 // =====================
 const cannon = {
   x: canvas.width / 2,
-  y: canvas.height - 30,
-  angle: 0
+  y: canvas.height - 155,
+  angle: 0,
+  recoil: 0
 };
 
 // =====================
@@ -83,49 +104,53 @@ const bullets = [];
 const particles = [];
 
 // =====================
-// 🎯 마우스 조준
+// 🎯 조준 (그대로 유지)
 // =====================
-canvas.addEventListener("mousemove", (e) => {
-
-  const dx = e.clientX - cannon.x;
-  const dy = e.clientY - cannon.y;
-
-  cannon.angle = Math.atan2(dy, dx);
-});
-
-// =====================
-// 🔥 클릭 발사 (룰렛 제거됨)
-// =====================
-canvas.addEventListener("click", (e) => {
+canvas.addEventListener("pointermove", (e) => {
 
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  // 💰 SCORE → COIN 버튼 클릭
-  if (
-    score >= 1000 &&
-    x > exchangeButton.x &&
-    x < exchangeButton.x + exchangeButton.width &&
-    y > exchangeButton.y &&
-    y < exchangeButton.y + exchangeButton.height
-  ) {
-    score -= 1000;
-    coins += 500;
-  }
+  const dx = x - cannon.x;
+  const dy = y - cannon.y;
 
-  // 🔫 기존 발사 (항상 실행)
-  bullets.push({
-    x: cannon.x,
-    y: cannon.y,
-    targetX: cannon.x + Math.cos(cannon.angle) * 1000,
-    targetY: cannon.y + Math.sin(cannon.angle) * 1000,
-    speed: 10
-  });
-  lastShotTime = Date.now();
-
+  cannon.angle = Math.atan2(dy, dx);
 });
 
+// =====================
+// 🔥 발사 + UI 충돌 방어 (핵심)
+// =====================
+canvas.addEventListener("pointerdown", (e) => {
+
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // 💰 UI 먼저 처리
+  if (isInsideButton(x, y, exchangeButton)) {
+
+    if (score >= 1000) {
+      score -= 1000;
+      coins += 500;
+    }
+
+    return;
+  }
+
+  // 🎮 게임 입력
+  isFiring = true;
+});
+// =====================
+// 🔥 발사 종료
+// =====================
+canvas.addEventListener("pointerup", () => {
+  isFiring = false;
+});
+
+canvas.addEventListener("pointercancel", () => {
+  isFiring = false;
+});
 // =====================
 // 🐠 물고기 스폰 시스템
 // =====================
@@ -518,7 +543,8 @@ function startSlot() {
     p.y += p.vy;
     p.life--;
 
-    ctx.fillStyle = "rgba(255,200,0,0.8)";
+    //ctx.fillStyle = "rgba(255,200,0,0.8)";
+    ctx.fillStyle = "rgba(255, 0, 13, 0.8)";
     ctx.beginPath();
     ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fill();
@@ -568,6 +594,18 @@ updateSlots();
 drawSlots();
 drawRewardText();
 
+if (isFiring) {
+
+  if (fireDelay > 0) {
+    fireDelay--;
+  }
+
+  if (fireDelay <= 0) {
+    shoot();
+    fireDelay = fireCooldown;
+  }
+}
+
 requestAnimationFrame(gameLoop);
 }
 
@@ -575,9 +613,16 @@ requestAnimationFrame(gameLoop);
 // 대포
 // =====================
 function drawCannon() {
+
+  // 🔥 반동 감소
+  if (cannon.recoil > 0) {
+    cannon.recoil *= 0.8;
+  }
   ctx.save();
   ctx.translate(cannon.x, cannon.y);
   ctx.rotate(cannon.angle);
+  // 🔥 반동 적용
+  ctx.translate(-cannon.recoil, 0);
   ctx.fillStyle = "black";
   ctx.fillRect(0, -10, 60, 20);
   ctx.restore();
@@ -825,4 +870,19 @@ function drawExchangeButton() {
     x + w / 2,
     y + h / 2
   );
+}
+function shoot() {
+
+  
+  bullets.push({
+    x: cannon.x,
+    y: cannon.y,
+    targetX: cannon.x + Math.cos(cannon.angle) * 1000,
+    targetY: cannon.y + Math.sin(cannon.angle) * 1000,
+    speed: 10
+  });
+
+  cannon.recoil = 10;
+
+  lastShotTime = Date.now();
 }
