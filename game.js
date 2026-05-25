@@ -22,8 +22,19 @@ let fishSpawnPaused = false;
 let isFiring = false;
 let fireDelay = 0;
 let fireCooldown = 6;
-let isPointerOnUI = false;
 let muzzleFlash = 0;
+let isPointerOnUI = false;
+
+// =====================
+// 🎵 사운드
+// =====================
+const shootSound = new Audio("shoot.mp3");
+const hitSound = new Audio("hit.mp3");
+const slotSound = new Audio("slot.mp3");
+
+shootSound.volume = 0.3;
+hitSound.volume = 0.4;
+slotSound.volume = 0.5;
 
 const exchangeButton = {
   x: canvas.width / 2 - 120,
@@ -210,7 +221,7 @@ function spawnBoss() {
 function startSlot() {
 
   slotSpinning = true;
-  slotTimer = 120;
+  slotTimer = 290;
 }
 
 // =====================
@@ -381,12 +392,14 @@ function startSlot() {
     // 💥 이펙트
     for (let i = 0; i < 15; i++) {
       particles.push({
-        x: targetFish.x,
-        y: targetFish.y,
-        vx: (Math.random() - 0.5) * 8,
-        vy: (Math.random() - 0.5) * 8,
-        life: 30
-      });
+  x: b.x,
+  y: b.y,
+  vx: (Math.random() - 0.5) * 6,
+  vy: (Math.random() - 0.5) * 6,
+  life: 30,
+  color: fish.color,
+  size: 3 + Math.random() * 4
+});
     }
   }
 
@@ -480,6 +493,8 @@ function startSlot() {
 
         bullets.splice(j, 1);
         fish.hp -= 1;
+        hitSound.currentTime = 0;
+        hitSound.play();
         fish.hitTime = 8;
 
         for (let k = 0; k < 12; k++) {
@@ -544,9 +559,10 @@ function startSlot() {
     p.life--;
 
     //ctx.fillStyle = "rgba(255,200,0,0.8)";
-    ctx.fillStyle = "rgba(255, 0, 13, 0.8)";
+    ctx.fillStyle = p.color || "rgba(255, 0, 13, 0.8)";
+
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI * 2);
     ctx.fill();
 
     if (p.life <= 0) particles.splice(i, 1);
@@ -579,13 +595,19 @@ function startSlot() {
   }
 }
 
-  drawCannon();
+if (muzzleFlash > 0) {
+  muzzleFlash--;
+}
+  
+drawCannon();
   drawExchangeButton();
   
 
 if (coins >= 100 && !slotSpinning) {
   coins -= 100;
   startSlot();
+  slotSound.currentTime = 0;
+  slotSound.play();
 }
 
 // 🎰 슬롯 업데이트
@@ -618,13 +640,43 @@ function drawCannon() {
   if (cannon.recoil > 0) {
     cannon.recoil *= 0.8;
   }
+
   ctx.save();
+
   ctx.translate(cannon.x, cannon.y);
   ctx.rotate(cannon.angle);
+
   // 🔥 반동 적용
   ctx.translate(-cannon.recoil, 0);
+
+  // 🔫 대포
   ctx.fillStyle = "black";
   ctx.fillRect(0, -10, 60, 20);
+
+  // 🔥 총구 화염
+  if (muzzleFlash > 0) {
+
+    // 바깥 화염
+    ctx.fillStyle = "orange";
+
+    ctx.beginPath();
+    ctx.moveTo(60, 0);
+    ctx.lineTo(90 + Math.random() * 20, -12);
+    ctx.lineTo(90 + Math.random() * 20, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    // 안쪽 화염
+    ctx.fillStyle = "yellow";
+
+    ctx.beginPath();
+    ctx.moveTo(60, 0);
+    ctx.lineTo(80 + Math.random() * 10, -6);
+    ctx.lineTo(80 + Math.random() * 10, 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   ctx.restore();
 }
 
@@ -885,5 +937,9 @@ function shoot() {
 
   cannon.recoil = 10;
 
+  shootSound.currentTime = 0;
+  shootSound.play();
+
   lastShotTime = Date.now();
 }
+
