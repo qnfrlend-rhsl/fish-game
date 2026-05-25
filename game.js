@@ -21,9 +21,12 @@ let fishSpawnInterval = null;
 let fishSpawnPaused = false;
 let isFiring = false;
 let fireDelay = 0;
-let fireCooldown = 6;
+let fireCooldown = 4;
 let muzzleFlash = 0;
 let isPointerOnUI = false;
+let lastHitSound = 0;
+let lastActionTime = Date.now();
+let gameMode = "active"; // active / idle
 
 // =====================
 // 🎵 사운드
@@ -134,6 +137,8 @@ canvas.addEventListener("pointermove", (e) => {
 // =====================
 canvas.addEventListener("pointerdown", (e) => {
 
+  lastActionTime = Date.now();
+
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
@@ -219,6 +224,8 @@ function spawnBoss() {
 }
 
 function startSlot() {
+
+  lastActionTime = Date.now();
 
   slotSpinning = true;
   slotTimer = 290;
@@ -462,7 +469,7 @@ function startSlot() {
 
       if (odist < obs.r) {
         bullets.splice(i, 1);
-        break;
+        continue;
       }
     }
 
@@ -491,13 +498,18 @@ function startSlot() {
 
       if (dist < hitRadius) {
 
-        bullets.splice(j, 1);
-        fish.hp -= 1;
-        hitSound.currentTime = 0;
-        hitSound.play();
-        fish.hitTime = 8;
+            bullets.splice(j, 1);
+            fish.hp -= 1;
 
-        for (let k = 0; k < 12; k++) {
+      if (Date.now() - lastHitSound > 50) {
+          const h = hitSound.cloneNode();
+          h.volume = 0.2;
+           h.play();
+              lastHitSound = Date.now();
+               }
+
+        for (let k = 0; k < 6; k++) {
+          if (particles.length > 300) continue;
           particles.push({
             x: b.x,
             y: b.y,
@@ -924,6 +936,8 @@ function drawExchangeButton() {
   );
 }
 function shoot() {
+
+  lastActionTime = Date.now();
 
   muzzleFlash = 5;
   
