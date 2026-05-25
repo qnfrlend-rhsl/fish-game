@@ -9,10 +9,10 @@ function resizeCanvas() {
   canvas.width = 1280;
   canvas.height = 720;
 
-  // 🔥 scale 계산 (핵심)
   scale = Math.min(
     window.innerWidth / 1280,
-    window.innerHeight / 720
+    window.innerHeight / 720,
+    1
   );
 
   exchangeButton.x = canvas.width / 2 - exchangeButton.width / 2;
@@ -22,9 +22,6 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas(); // 처음 1회 실행
-
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
 
 canvas.style.touchAction = "none";
 canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
@@ -255,7 +252,8 @@ function startSlot() {
 
   function gameLoop() {
     
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // 초기화
+    ctx.scale(scale, scale);
 
     idleTimer = Date.now() - lastShotTime;
 
