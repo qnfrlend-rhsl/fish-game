@@ -873,6 +873,7 @@ function drawExchangeButton() {
 }
 function shoot() {
 
+  muzzleFlash = 5;
   
   bullets.push({
     x: cannon.x,
