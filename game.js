@@ -3,6 +3,26 @@ document.body.addEventListener("touchmove", (e) => e.preventDefault(), { passive
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+let scale = 1;
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // 🔥 scale 계산 (핵심)
+  scale = Math.min(
+    window.innerWidth / 1280,
+    window.innerHeight / 720
+  );
+
+  exchangeButton.x = canvas.width / 2 - exchangeButton.width / 2;
+  cannon.x = canvas.width / 2;
+  cannon.y = canvas.height - 30;
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas(); // 처음 1회 실행
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
@@ -236,6 +256,8 @@ function startSlot() {
 // =====================
 
   function gameLoop() {
+    
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
     idleTimer = Date.now() - lastShotTime;
 
