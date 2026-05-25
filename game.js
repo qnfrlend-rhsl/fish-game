@@ -209,9 +209,7 @@ function spawnFish() {
 function startFishSpawn() {
   if (fishSpawnInterval) return;
 
-  fishSpawnInterval = setInterval(() => {
-    spawnFish();
-  }, 5000);
+  fishSpawnInterval = setInterval(spawnFish, 5000);
 }
 
 function stopFishSpawn() {
@@ -262,10 +260,10 @@ function startSlot() {
     idleTimer = Date.now() - lastShotTime;
 
   if (idleTimer > 5000) {
-    stopFishSpawn();
-  } else {
-    startFishSpawn();
-  }
+  if (fishSpawnInterval) stopFishSpawn();
+} else {
+  if (!fishSpawnInterval) startFishSpawn();
+}
 
   let shakeX = 0;
   let shakeY = 0;
