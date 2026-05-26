@@ -1,31 +1,22 @@
-document.body.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-let scale = 1;
 
-function resizeCanvas() {
-  canvas.width = 1280;
-  canvas.height = 720;
 
-  scale = Math.min(
-    window.innerWidth / 1280,
-    window.innerHeight / 720,
-    1
-  );
+canvas.addEventListener("mousedown", () => {
+  autoFire = true;
+});
 
-  exchangeButton.x = canvas.width / 2 - exchangeButton.width / 2;
-  cannon.x = canvas.width / 2;
-  cannon.y = canvas.height - 30;
-}
+canvas.addEventListener("mouseup", () => {
+  autoFire = false;
+});
 
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas(); // 처음 1회 실행
+canvas.addEventListener("mouseleave", () => {
+  autoFire = false;
+});
 
-canvas.style.touchAction = "none";
-canvas.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-canvas.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
 let score = 0;
 let coins = 0;
@@ -36,25 +27,21 @@ let slotTimer = 0;
 let lastShotTime = Date.now();
 let fishSpawnInterval = null;
 let fishSpawnPaused = false;
-let isFiring = false;
-let fireDelay = 0;
-let fireCooldown = 4;
-let muzzleFlash = 0;
-let isPointerOnUI = false;
-let lastHitSound = 0;
-let lastActionTime = Date.now();
-let gameMode = "active"; // active / idle
+let idleTimer = 0;
+let fireInterval = null;
+let autoFire = false;
+let lastShot = 0;
 
-// =====================
-// 🎵 사운드
-// =====================
-const shootSound = new Audio("shoot.mp3");
-const hitSound = new Audio("hit.mp3");
-const slotSound = new Audio("slot.mp3");
 
-shootSound.volume = 0.3;
-hitSound.volume = 0.4;
-slotSound.volume = 0.5;
+function playSlotSound() {
+  const s = sound.slot.cloneNode();
+  s.volume = 1.0;
+  s.currentTime = 0;
+
+  s.playbackRate = 0.9 + Math.random() * 0.2;
+
+  s.play().catch(() => {});
+}
 
 const exchangeButton = {
   x: canvas.width / 2 - 120,
@@ -62,15 +49,6 @@ const exchangeButton = {
   width: 300,
   height: 50
 };
-
-function isInsideButton(x, y, btn) {
-  return (
-    x > btn.x &&
-    x < btn.x + btn.width &&
-    y > btn.y &&
-    y < btn.y + btn.height
-  );
-}
 
 const slotIcons = ["🍒", "💎", "7️⃣", "⭐","🐟"];
 
@@ -89,16 +67,103 @@ let screenShake = 0;
 let warningTimer = 0;
 let bgDark = 0;
 
+const sound = {
+  fire: new Audio("sounds/shoot.mp3"),
+  hit: new Audio("sounds/hit.mp3"),
+  death: new Audio("sounds/death.mp3"),
+  slot: new Audio("sounds/slot.mp3")
+};
+function playSlotSound() {
+  const s = sound.slot.cloneNode();
+  s.volume = 1.0;
+  s.currentTime = 0;
+
+  s.playbackRate = 0.9 + Math.random() * 0.2;
+
+  s.play().catch(() => {});
+}
+
+function setSound(a, v) {
+  a.volume = v;
+  a.preload = "auto";
+}
+
+function playSound(s) {
+  const audio = s.cloneNode();
+  audio.volume = 0.5;
+  audio.play();
+}
 // =====================
 // 🎯 대포 (추가)
 // =====================
 const cannon = {
   x: canvas.width / 2,
-  y: canvas.height - 155,
+  y: canvas.height - 150,
   angle: 0,
-  recoil: 0
+  recoil: 0   // 🔥 추가 (반동)
 };
 
+function shoot() {
+  playSound(sound.fire);
+  addCannonFire();  // 🔥 불꽃
+  cannon.recoil = 12;  // 💥 반동
+
+
+  bullets.push({
+    x: cannon.x,
+    y: cannon.y,
+    targetX: cannon.x + Math.cos(cannon.angle) * 1000,
+    targetY: cannon.y + Math.sin(cannon.angle) * 1000,
+    speed: 10,
+    vy: 0
+  });
+
+  lastShotTime = Date.now();
+}
+
+function addCannonFire() {
+  const muzzleX = cannon.x + Math.cos(cannon.angle) * 50;
+  const muzzleY = cannon.y + Math.sin(cannon.angle) * 50;
+
+  for (let i = 0; i < 25; i++) {
+
+    const angle = cannon.angle + (Math.random() - 0.5) * 1.2;
+    const speed = 2 + Math.random() * 4;
+
+    particles.push({
+      x: muzzleX,
+      y: muzzleY,
+
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+
+      life: 14 + Math.random() * 6,
+      size: 3 + Math.random() * 5,
+      type: "fire"
+    });
+  }
+}
+
+function drawCannon() {
+  ctx.save();
+
+  const recoilOffset = cannon.recoil;
+
+  ctx.translate(
+    cannon.x - Math.cos(cannon.angle) * recoilOffset,
+    cannon.y - Math.sin(cannon.angle) * recoilOffset
+  );
+
+  ctx.rotate(cannon.angle);
+
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, -10, 60, 20);
+
+  ctx.restore();
+
+  // 🔥 반동 복구
+  cannon.recoil *= 0.7;
+}
 // =====================
 // 🌊 배경 (추가)
 // =====================
@@ -135,54 +200,52 @@ const bullets = [];
 const particles = [];
 
 // =====================
-// 🎯 조준 (그대로 유지)
+// 🎯 마우스 조준
 // =====================
-canvas.addEventListener("pointermove", (e) => {
+canvas.addEventListener("mousemove", (e) => {
 
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  const dx = x - cannon.x;
-  const dy = y - cannon.y;
+  const dx = e.clientX - cannon.x;
+  const dy = e.clientY - cannon.y;
 
   cannon.angle = Math.atan2(dy, dx);
 });
 
-// =====================
-// 🔥 발사 + UI 충돌 방어 (핵심)
-// =====================
-canvas.addEventListener("pointerdown", (e) => {
-
-  lastActionTime = Date.now();
+canvas.addEventListener("mousedown", (e) => {
 
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  // 💰 UI 먼저 처리
-  if (isInsideButton(x, y, exchangeButton)) {
+  const b = exchangeButton;
 
+  if (
+    x >= b.x &&
+    x <= b.x + b.width &&
+    y >= b.y &&
+    y <= b.y + b.height
+  ) {
     if (score >= 1000) {
       score -= 1000;
       coins += 500;
     }
-
-    return;
   }
-
-  // 🎮 게임 입력
-  isFiring = true;
-});
-// =====================
-// 🔥 발사 종료
-// =====================
-canvas.addEventListener("pointerup", () => {
-  isFiring = false;
 });
 
-canvas.addEventListener("pointercancel", () => {
-  isFiring = false;
+// =====================
+// 🔥 클릭 발사 (룰렛 제거됨)
+// =====================
+canvas.addEventListener("mousedown", () => {
+  if (fireInterval) clearInterval(fireInterval);  
+});
+
+canvas.addEventListener("mouseup", () => {
+  clearInterval(fireInterval);
+  fireInterval = null;
+});
+
+canvas.addEventListener("mouseleave", () => {
+  clearInterval(fireInterval);
+  fireInterval = null;
 });
 // =====================
 // 🐠 물고기 스폰 시스템
@@ -206,7 +269,9 @@ function spawnFish() {
 function startFishSpawn() {
   if (fishSpawnInterval) return;
 
-  fishSpawnInterval = setInterval(spawnFish, 5000);
+  fishSpawnInterval = setInterval(() => {
+    spawnFish();
+  }, 5000);
 }
 
 function stopFishSpawn() {
@@ -239,11 +304,10 @@ function spawnBoss() {
 }
 
 function startSlot() {
-
-  lastActionTime = Date.now();
+  playSound(sound.slot);
 
   slotSpinning = true;
-  slotTimer = 290;
+  slotTimer = 120;
 }
 
 // =====================
@@ -251,17 +315,14 @@ function startSlot() {
 // =====================
 
   function gameLoop() {
-    
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // 초기화
-    ctx.scale(scale, scale);
 
     idleTimer = Date.now() - lastShotTime;
 
   if (idleTimer > 5000) {
-  if (fishSpawnInterval) stopFishSpawn();
-} else {
-  if (!fishSpawnInterval) startFishSpawn();
-}
+    stopFishSpawn();
+  } else {
+    startFishSpawn();
+  }
 
   let shakeX = 0;
   let shakeY = 0;
@@ -381,10 +442,11 @@ function startSlot() {
   if (targetFish) {
     const dx = targetFish.x - boss.x;
     const dy = targetFish.y - boss.y;
+
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
     boss.x += (dx / dist) * boss.speedX * 1.5;
-    boss.y += (dy / dist) * boss.speedY * 1.5;
+    boss.y += (dy / dist) * boss.speedY * 1.2;
   } else {
     boss.x += boss.speedX;
     boss.y += boss.speedY;
@@ -398,35 +460,34 @@ function startSlot() {
   if (boss.x < boss.width / 2 || boss.x > canvas.width - boss.width / 2)
     boss.speedX *= -1;
 
-  if (boss.y < 100 || boss.y > canvas.height / 2)
-    boss.speedY *= -1;
+  if (boss.y < 100) boss.speedY *= -1;
+    if (boss.y > canvas.height - 100) boss.speedY *= -1;
 
   // =========================
   // 🍽️ 먹기 판정
   // =========================
   const eatRange = boss.width * 0.4;
 
-  if (targetFish && minDist < eatRange) {
+if (targetFish && minDist < eatRange) {
 
-    const index = fishes.indexOf(targetFish);
-    if (index !== -1) fishes.splice(index, 1);
+  const index = fishes.indexOf(targetFish);
+  if (index !== -1) fishes.splice(index, 1);
 
-    score += 20;
-    coins += 10;
+  score += 20;
+  coins += 10;
 
-    // 💥 이펙트
-    for (let i = 0; i < 15; i++) {
-      particles.push({
-  x: b.x,
-  y: b.y,
-  vx: (Math.random() - 0.5) * 6,
-  vy: (Math.random() - 0.5) * 6,
-  life: 30,
-  color: fish.color,
-  size: 3 + Math.random() * 4
-});
-    }
+  // 🔴 보스가 먹을 때 폭발
+  for (let i = 0; i < 20; i++) {
+    particles.push({
+      x: targetFish.x,
+      y: targetFish.y,
+      vx: (Math.random() - 0.5) * 10,
+      vy: (Math.random() - 0.5) * 10,
+      life: 25,
+      type: "death"
+    });
   }
+}
 
   // =========================
   // 🐋 렌더링
@@ -473,7 +534,7 @@ function startSlot() {
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
     b.x += (dx / dist) * b.speed;
-    b.y += (dy / dist) * b.speed;
+    b.y += (dy / dist) * b.speed + b.vy;
 
     ctx.fillStyle = "yellow";
     ctx.beginPath();
@@ -487,7 +548,7 @@ function startSlot() {
 
       if (odist < obs.r) {
         bullets.splice(i, 1);
-        continue;
+        break;
       }
     }
 
@@ -516,34 +577,53 @@ function startSlot() {
 
       if (dist < hitRadius) {
 
-            bullets.splice(j, 1);
-            fish.hp -= 1;
+        playSound(sound.hit);
 
-      if (Date.now() - lastHitSound > 50) {
-          const h = hitSound.cloneNode();
-          h.volume = 0.2;
-           h.play();
-              lastHitSound = Date.now();
-               }
+        bullets.splice(j, 1);
+        fish.hp -= 1;
+        fish.hitTime = 8;
 
-        for (let k = 0; k < 6; k++) {
-          if (particles.length > 300) continue;
+        // 🟠 맞을 때 (히트)
+        for (let k = 0; k < 12; k++) {
           particles.push({
             x: b.x,
             y: b.y,
             vx: (Math.random() - 0.5) * 6,
             vy: (Math.random() - 0.5) * 6,
-            life: 30
+            life: 12,
+            type: "hit"
           });
         }
 
+        // 🔴 죽을 때 (폭발)
         if (fish.hp <= 0) {
-          fishes.splice(i, 1);
-          score += 10;
-          coins += 10;
-        }
 
-        break;
+          playSound(sound.hit);
+
+    for (let k = 0; k < 25; k++) {
+
+  const angle = Math.random() * Math.PI * 2;
+  const speed = 2 + Math.random() * 6;
+
+  particles.push({
+    x: fish.x,
+    y: fish.y,
+
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+
+    life: 20 + Math.random() * 15,
+    size: 2 + Math.random() * 4,
+    type: "death"
+  });
+}
+
+    fishes.splice(i, 1);
+    score += 10;
+    coins += 10;
+  }
+
+  break;
       }
     }
    }
@@ -582,21 +662,33 @@ function startSlot() {
   // 파티클
   // =====================
   for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
+  const p = particles[i];
 
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life--;
+  p.x += p.vx;
+  p.y += p.vy;
+  p.life--;
 
-    //ctx.fillStyle = "rgba(255,200,0,0.8)";
-    ctx.fillStyle = p.color || "rgba(255, 0, 13, 0.8)";
+  ctx.beginPath();
 
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size || 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (p.life <= 0) particles.splice(i, 1);
+  if (p.type === "fire") {
+    ctx.fillStyle = `rgba(255, ${150 + Math.random() * 100}, 0, ${p.life / 12})`;
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
   }
+
+  else if (p.type === "hit") {
+    ctx.fillStyle = "rgba(255, 0, 21, 0.8)";
+    ctx.arc(p.x, p.y, 2 + Math.random() * 2, 0, Math.PI * 2);
+  }
+
+  else if (p.type === "death") {
+    ctx.fillStyle = "red";
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+  }
+
+  ctx.fill();
+
+  if (p.life <= 0) particles.splice(i, 1);
+}
 
   // 🪨 장애물 렌더
   for (let obs of obstacles) {
@@ -625,19 +717,13 @@ function startSlot() {
   }
 }
 
-if (muzzleFlash > 0) {
-  muzzleFlash--;
-}
-  
-drawCannon();
+  drawCannon();
   drawExchangeButton();
   
 
 if (coins >= 100 && !slotSpinning) {
   coins -= 100;
   startSlot();
-  slotSound.currentTime = 0;
-  slotSound.play();
 }
 
 // 🎰 슬롯 업데이트
@@ -646,68 +732,7 @@ updateSlots();
 drawSlots();
 drawRewardText();
 
-if (isFiring) {
-
-  if (fireDelay > 0) {
-    fireDelay--;
-  }
-
-  if (fireDelay <= 0) {
-    shoot();
-    fireDelay = fireCooldown;
-  }
-}
-
 requestAnimationFrame(gameLoop);
-}
-
-// =====================
-// 대포
-// =====================
-function drawCannon() {
-
-  // 🔥 반동 감소
-  if (cannon.recoil > 0) {
-    cannon.recoil *= 0.8;
-  }
-
-  ctx.save();
-
-  ctx.translate(cannon.x, cannon.y);
-  ctx.rotate(cannon.angle);
-
-  // 🔥 반동 적용
-  ctx.translate(-cannon.recoil, 0);
-
-  // 🔫 대포
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, -10, 60, 20);
-
-  // 🔥 총구 화염
-  if (muzzleFlash > 0) {
-
-    // 바깥 화염
-    ctx.fillStyle = "orange";
-
-    ctx.beginPath();
-    ctx.moveTo(60, 0);
-    ctx.lineTo(90 + Math.random() * 20, -12);
-    ctx.lineTo(90 + Math.random() * 20, 12);
-    ctx.closePath();
-    ctx.fill();
-
-    // 안쪽 화염
-    ctx.fillStyle = "yellow";
-
-    ctx.beginPath();
-    ctx.moveTo(60, 0);
-    ctx.lineTo(80 + Math.random() * 10, -6);
-    ctx.lineTo(80 + Math.random() * 10, 6);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  ctx.restore();
 }
 
 // =====================
@@ -915,6 +940,13 @@ startFishSpawn();
 // =====================
 gameLoop();
 function drawExchangeButton() {
+  
+  if (autoFire) {
+  if (Date.now() - lastShotTime > 80) {
+    shoot();
+    lastShotTime = Date.now();
+  }
+}
 
   if (score < 1000) return;
 
@@ -953,25 +985,16 @@ function drawExchangeButton() {
     y + h / 2
   );
 }
-function shoot() {
+document.addEventListener("click", () => {
+  sound.fire.play().then(() => {
+    sound.fire.pause();
+    sound.fire.currentTime = 0;
+  }).catch(() => {});
+}, { once: true });
 
-  lastActionTime = Date.now();
+function playSound(audio) {
+  const s = audio.cloneNode();
+  s.volume = 0.5;
 
-  muzzleFlash = 5;
-  
-  bullets.push({
-    x: cannon.x,
-    y: cannon.y,
-    targetX: cannon.x + Math.cos(cannon.angle) * 1000,
-    targetY: cannon.y + Math.sin(cannon.angle) * 1000,
-    speed: 10
-  });
-
-  cannon.recoil = 10;
-
-  shootSound.currentTime = 0;
-  shootSound.play();
-
-  lastShotTime = Date.now();
+  s.play().catch(() => {});
 }
-
