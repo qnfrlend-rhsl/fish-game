@@ -748,7 +748,6 @@ function checkSlotReward() {
       score *= 2;
       rewardText = "7️⃣ DOUBLE SCORE!";
     }
-
     // ⭐
     if (slots[0] === "⭐") {
       coins += 200;
