@@ -20,7 +20,6 @@ const exchangeButton = {
   width: 300,
   height: 50
 };
-
 const slotIcons = ["🍒", "💎", "7️⃣", "⭐","🐟"];
 
 let slots = ["🍒", "🍒", "🍒"];
